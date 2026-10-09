@@ -1,6 +1,6 @@
 # Configurações do Projeto Oak (C)
 CC := gcc
-CFLAGS := -g -O2 -Wall -Wextra -std=gnu11 -ffreestanding -mno-red-zone -m64 -mcmodel=kernel -I src/init
+CFLAGS := -g -O2 -Wall -Wextra -std=gnu11 -ffreestanding -mno-red-zone -m64 -mcmodel=kernel -I src/boot -I src/kernel -I src/init
 LDFLAGS := -m elf_x86_64 -nostdlib -T linker.ld
 IMAGE_NAME := oak
 
@@ -8,10 +8,10 @@ IMAGE_NAME := oak
 all: $(IMAGE_NAME).iso
 
 # 1. Baixa o protocolo oficial via git clone
-src/init/limine.h:
+src/boot/limine.h:
 	rm -rf limine-protocol-tmp
 	git clone https://github.com/limine-bootloader/limine-protocol.git limine-protocol-tmp
-	cp limine-protocol-tmp/include/limine.h src/init/limine.h
+	cp limine-protocol-tmp/include/limine.h src/boot/limine.h
 	rm -rf limine-protocol-tmp
 
 # 2. Baixa e compila o utilitário binário do Limine para criar a ISO
@@ -24,10 +24,12 @@ limine-binary/limine: limine-binary.tar.gz
 	gunzip < limine-binary.tar.gz | tar -xf -
 	$(MAKE) -C limine-binary
 
-# 3. Compila o Kernel C
-kernel.elf: src/init/limine.h src/init/main.c linker.ld
+# 3. Compila o Kernel C (camada de boot, núcleo do kernel e ponto de entrada)
+kernel.elf: src/boot/limine.h src/boot/boot.h src/boot/boot.c src/kernel/kernel.h src/kernel/kernel.c src/init/main.c linker.ld
+	$(CC) $(CFLAGS) -c src/boot/boot.c -o boot.o
+	$(CC) $(CFLAGS) -c src/kernel/kernel.c -o kernel.o
 	$(CC) $(CFLAGS) -c src/init/main.c -o main.o
-	ld $(LDFLAGS) main.o -o kernel.elf
+	ld $(LDFLAGS) boot.o kernel.o main.o -o kernel.elf
 
 # 4. Empacota tudo em uma imagem ISO bootável
 $(IMAGE_NAME).iso: limine-binary/limine kernel.elf
@@ -44,7 +46,7 @@ $(IMAGE_NAME).iso: limine-binary/limine kernel.elf
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
 		iso_root -o $(IMAGE_NAME).iso
 	./limine-binary/limine bios-install $(IMAGE_NAME).iso
-	rm -rf iso_root main.o
+	rm -rf iso_root boot.o kernel.o main.o
 
 # 5. Roda no QEMU redirecionando a porta serial para o seu terminal
 .PHONY: run
@@ -60,4 +62,4 @@ run: $(IMAGE_NAME).iso
 # Limpeza dos artefatos de build
 .PHONY: clean
 clean:
-	rm -rf iso_root *.iso kernel.elf main.o limine-binary limine-binary.tar.gz src/init/limine.h
+	rm -rf iso_root *.iso kernel.elf boot.o kernel.o main.o limine-binary limine-binary.tar.gz src/boot/limine.h
