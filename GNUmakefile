@@ -25,11 +25,13 @@ limine-binary/limine: limine-binary.tar.gz
 	$(MAKE) -C limine-binary
 
 # 3. Compila o Kernel C (camada de boot, núcleo do kernel e ponto de entrada)
-kernel.elf: src/boot/limine.h src/boot/boot.h src/boot/boot.c src/kernel/kernel.h src/kernel/kernel.c src/init/main.c linker.ld
+kernel.elf: src/boot/limine.h src/boot/boot.h src/boot/boot.c src/kernel/kernel.h src/kernel/kernel.c src/kernel/serial.h src/kernel/serial.c src/kernel/log.h src/kernel/log.c src/init/main.c linker.ld
 	$(CC) $(CFLAGS) -c src/boot/boot.c -o boot.o
 	$(CC) $(CFLAGS) -c src/kernel/kernel.c -o kernel.o
+	$(CC) $(CFLAGS) -c src/kernel/serial.c -o serial.o
+	$(CC) $(CFLAGS) -c src/kernel/log.c -o log.o
 	$(CC) $(CFLAGS) -c src/init/main.c -o main.o
-	ld $(LDFLAGS) boot.o kernel.o main.o -o kernel.elf
+	ld $(LDFLAGS) boot.o kernel.o serial.o log.o main.o -o kernel.elf
 
 # 4. Empacota tudo em uma imagem ISO bootável
 $(IMAGE_NAME).iso: limine-binary/limine kernel.elf
@@ -46,7 +48,7 @@ $(IMAGE_NAME).iso: limine-binary/limine kernel.elf
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
 		iso_root -o $(IMAGE_NAME).iso
 	./limine-binary/limine bios-install $(IMAGE_NAME).iso
-	rm -rf iso_root boot.o kernel.o main.o
+	rm -rf iso_root boot.o kernel.o serial.o log.o main.o
 
 # 5. Roda no QEMU redirecionando a porta serial para o seu terminal
 .PHONY: run
@@ -62,4 +64,4 @@ run: $(IMAGE_NAME).iso
 # Limpeza dos artefatos de build
 .PHONY: clean
 clean:
-	rm -rf iso_root *.iso kernel.elf boot.o kernel.o main.o limine-binary limine-binary.tar.gz src/boot/limine.h
+	rm -rf iso_root *.iso kernel.elf boot.o kernel.o serial.o log.o main.o limine-binary limine-binary.tar.gz src/boot/limine.h
